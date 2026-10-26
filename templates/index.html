@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Bin Dashboard</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 25px;
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            color: #172033;
+        }
+
+        header {
+            background: #14532d;
+            color: white;
+            padding: 24px;
+            border-radius: 14px;
+            margin-bottom: 22px;
+        }
+
+        header p {
+            color: #dcfce7;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .panel,
+        .bin {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px #0000000a;
+        }
+
+        .number {
+            font-size: 30px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+
+        #bins {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 16px;
+        }
+
+        .bar {
+            height: 10px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 14px 0;
+        }
+
+        .fill {
+            height: 100%;
+            background: #16a34a;
+            transition: width 0.3s;
+        }
+
+        .high .fill {
+            background: #ea580c;
+        }
+
+        .critical .fill {
+            background: #dc2626;
+        }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .critical .status {
+            color: #dc2626;
+        }
+
+        .high .status {
+            color: #c2410c;
+        }
+
+        .normal .status {
+            color: #15803d;
+        }
+
+        .muted {
+            color: #64748b;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .priority-1 {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .priority-2 {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
+        .priority-3 {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        button {
+            width: 100%;
+            padding: 11px;
+            margin-top: 8px;
+            border: none;
+            border-radius: 8px;
+            background: #166534;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #14532d;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 12px;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        @media (max-width: 500px) {
+            body {
+                padding: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>♻️ Smart Waste Management</h1>
+        <p>Efficient Garbage Collection Using Smart Bins</p>
+        <span id="connection">Connecting...</span>
+    </header>
+
+    <div class="summary">
+        <div class="panel">
+            Total Bins
+            <div class="number" id="total">0</div>
+        </div>
+
+        <div class="panel">
+            High / Critical
+            <div class="number" id="urgent">0</div>
+        </div>
+
+        <div class="panel">
+            Average Fill
+            <div class="number" id="average">0%</div>
+        </div>
+    </div>
+
+    <h2>Bin Monitoring & Collection Priority</h2>
+    <p class="muted">Priority 1 means the bin should be collected first.</p>
+
+    <div id="bins">Loading bin data...</div>
+
+    <script>
+        async function updateDashboard() {
+            const connection = document.getElementById("connection");
+
+            try {
+                const response = await fetch("/api/bins");
+
+                if (!response.ok) {
+                    throw new Error("Could not load bins");
+                }
+
+                const bins = await response.json();
+
+                document.getElementById("total").textContent = bins.length;
+
+                document.getElementById("urgent").textContent =
+                    bins.filter(b => Number(b.fill) >= 70).length;
+
+                const average = bins.length
+                    ? bins.reduce((sum, b) => sum + Number(b.fill), 0) / bins.length
+                    : 0;
+
+                document.getElementById("average").textContent =
+                    average.toFixed(1) + "%";
+
+                // Sort: CRITICAL first, HIGH second, NORMAL last.
+                bins.sort((a, b) => {
+                    const fillA = Number(a.fill);
+                    const fillB = Number(b.fill);
+
+                    const rankA = fillA >= 90 ? 1 : fillA >= 70 ? 2 : 3;
+                    const rankB = fillB >= 90 ? 1 : fillB >= 70 ? 2 : 3;
+
+                    return rankA - rankB || fillB - fillA;
+                });
+
+                document.getElementById("bins").innerHTML = bins.length
+                    ? bins.map((b, index) => {
+                        const level = Math.max(
+                            0,
+                            Math.min(100, Number(b.fill) || 0)
+                        );
+
+                        const status = level >= 90
+                            ? "critical"
+                            : level >= 70 ? "high" : "normal";
+
+                        const priority = level >= 90
+                            ? 1 : level >= 70 ? 2 : 3;
+
+                        const priorityText = priority === 1
+                            ? "COLLECT FIRST"
+                            : priority === 2 ? "COLLECT SOON" : "CAN WAIT";
+
+                        const instruction = priority === 1
+                            ? "Collect immediately"
+                            : priority === 2
+                                ? "Collection needed soon"
+                                : "No urgent collection needed";
+
+                        const safeId = String(b.bin_id)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#39;");
+
+                        return `
+                <div class="bin ${status}">
+                  <span class="priority priority-${priority}">
+                    Priority ${index + 1} · ${priorityText}
+                  </span>
+
+                  <h3>🗑️ ${safeId}</h3>
+
+                  <div class="number">${level.toFixed(1)}%</div>
+
+                  <div class="bar">
+                    <div class="fill" style="width:${level}%"></div>
+                  </div>
+
+                  <p class="status">${status.toUpperCase()}</p>
+                  <p class="muted">${instruction}</p>
+
+                  <button
+                    onclick="collectBin('${safeId}', this)">
+                    Mark as Collected
+                  </button>
+
+                  <div class="message" id="message-${safeId}"></div>
+                </div>
+              `;
+                    }).join("")
+                    : "<p>No bins registered yet. Start your simulations first.</p>";
+
+                connection.textContent =
+                    "● Connected to Flask · Updated " +
+                    new Date().toLocaleTimeString();
+
+            } catch (error) {
+                connection.textContent =
+                    "Connection error — check that Flask is running";
+            }
+        }
+
+        async function collectBin(binId, button) {
+            if (!confirm("Have you emptied " + binId + "?")) {
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = "Recording collection...";
+
+            try {
+                const response = await fetch("/api/collect", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        bin_id: binId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || "Collection failed");
+                }
+
+                alert(result.message || "Collection recorded successfully");
+
+                await updateDashboard();
+
+            } catch (error) {
+                alert(
+                    "Could not record collection. Check the Flask API.\n" +
+                    error.message
+                );
+
+                button.disabled = false;
+                button.textContent = "Mark as Collected";
+            }
+        }
+
+        updateDashboard();
+        setInterval(updateDashboard, 2000);
+    </script>
+
+    <section class="collection-history">
+        <h2>Collection History</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Bin ID</th>
+                    <th>Fill Before Collection</th>
+                    <th>Collection Date & Time</th>
+                </tr>
+            </thead>
+            <tbody id="collection-history-body">
+                <tr>
+                    <td colspan="3">Loading collection history...</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <style>
+        .collection-history {
+            margin: 30px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+
+        .collection-history table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .collection-history th,
+        .collection-history td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .collection-history th {
+            background: #f2f4f7;
+        }
+    </style>
+
+    <script>
+        async function loadCollectionHistory() {
+            const tbody = document.getElementById("collection-history-body");
+
+            try {
+                const response = await fetch("/api/collections");
+
+                if (!response.ok) {
+                    throw new Error("Could not load collection history");
+                }
+
+                const records = await response.json();
+                tbody.replaceChildren();
+
+                if (records.length === 0) {
+                    const row = tbody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 3;
+                    cell.textContent = "No collections recorded yet.";
+                    return;
+                }
+
+                records.forEach(record => {
+                    const row = tbody.insertRow();
+
+                    const binCell = row.insertCell();
+                    binCell.textContent = record.bin_id;
+
+                    const fillCell = row.insertCell();
+                    fillCell.textContent =
+                        Number(record.fill_before).toFixed(1) + "%";
+
+                    const dateCell = row.insertCell();
+                    dateCell.textContent = record.collected_at;
+                });
+            } catch (error) {
+                tbody.replaceChildren();
+                const row = tbody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 3;
+                cell.textContent = "Unable to load collection history.";
+                console.error(error);
+            }
+        }
+
+        loadCollectionHistory();
+        setInterval(loadCollectionHistory, 5000);
+    </script>
+
+</body>
+
+</html>
