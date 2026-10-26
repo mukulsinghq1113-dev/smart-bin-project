@@ -3,8 +3,8 @@ import json
 import time
 from urllib.request import Request, urlopen
 
-API_URL = "http://127.0.0.1:5000/api/bin"
-BINS_URL = "http://127.0.0.1:5000/api/bins"
+API_URL = "https://smart-bin-project.onrender.com/api/bin"
+BINS_URL = "https://smart-bin-project.onrender.com/api/bins"
 
 bins = {
     "BIN002": 0.0,
